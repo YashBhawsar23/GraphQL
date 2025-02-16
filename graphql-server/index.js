@@ -36,7 +36,8 @@ getUser(id: ID!): User
 }
 
 type Mutation {
-createUser(name: String!, email: String!): User
+signup(name: String!, email: String!, password: String!): AuthPayload
+login(email: String!, password: String!): AuthPayload
 }
 `;
 
@@ -65,7 +66,7 @@ const resolvers = {
       const user = await User.findOne({ email });
       if (!user) throw new Error("User not Found");
 
-      const isMatch = await bycrypt.comapre(password, user.password);
+      const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) throw new Error("Invalid credentials");
 
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
@@ -79,12 +80,35 @@ const resolvers = {
 const app = express();
 const server = new ApolloServer({ typeDefs, resolvers });
 
+// Middleware to extract user from token
+const authMiddleware = (req) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(" ")[1];
+    try {
+      return jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      throw new Error("Invalid Token");
+    }
+  }
+  return null;
+};
+
 // Start Server
 async function startServer() {
   await server.start();
+
   app.use(cors());
   app.use(bodyParser.json());
-  app.use("/graphql", expressMiddleware(server));
+  app.use(
+    "/graphql",
+    expressMiddleware(server, {
+      context: async ({ req }) => {
+        const user = authMiddleware(req);
+        return { user };
+      },
+    })
+  );
 
   app.listen(3000, () => {
     console.log("Server running on port 3000");
