@@ -1,4 +1,5 @@
 require("dotenv").config();
+const User = require("./models/User");
 const express = require("express");
 const { graphqlHTTP } = require("express-graphql");
 const { buildSchema } = require("graphql");
@@ -36,14 +37,14 @@ const schema = buildSchema(`
 const users = {};
 
 const root = {
-  getUser: ({ id }) => {
-    return users[id];
+  getUser: async ({ id }) => {
+    return await User.findById(id);
   },
 
-  createUser: ({ name, email }) => {
-    const id = Date.now().toString();
-    users[id] = { id, name, email };
-    return users[id];
+  createUser: async ({ name, email }) => {
+    const newUser = new User({ name, email });
+    await newUser.save();
+    return newUser;
   },
 };
 
