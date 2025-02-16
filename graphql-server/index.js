@@ -1,10 +1,15 @@
 require("dotenv").config();
-const User = require("./models/User");
 const express = require("express");
-const { graphqlHTTP } = require("express-graphql");
-const { buildSchema } = require("graphql");
+const { ApolloServer } = require("@apollo/server");
+const { expressMiddleware } = require("@apollo/server/express4");
+const cors = require("cors");
+const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const User = require("./models/User");
 
+// Connect to MongoDB
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
@@ -13,52 +18,77 @@ mongoose
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.log("Connection Error", err));
 
-const app = express();
+// Defining Schema
+const typeDefs = `
+type User {
+id: ID!
+name: String!
+email: String!
+}
 
-// Defining GraphQL Schema
-const schema = buildSchema(`
-    type User {
-    id: ID!
-    name: String!
-    email: String!
-    }
+type AuthPayload {
+token: String!
+user: User!
+}
 
-    type Query {
-    getUser(id: ID!): User
-    }
+type Query {
+getUser(id: ID!): User
+}
 
-    type Mutation {
-    createUser (name: String!, email: String!): User
-    }
-
-    `);
+type Mutation {
+createUser(name: String!, email: String!): User
+}
+`;
 
 // Define Resolvers
-const users = {};
-
-const root = {
-  getUser: async ({ id }) => {
-    return await User.findById(id);
+const resolvers = {
+  Query: {
+    getUser: async (_, { id }, context) => {
+      if (!context.user) throw new Error("Unauthorized");
+      return await User.findById(id);
+    },
   },
+  Mutation: {
+    signup: async (_, { name, email, password }) => {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) throw new Error("User already exists");
 
-  createUser: async ({ name, email }) => {
-    const newUser = new User({ name, email });
-    await newUser.save();
-    return newUser;
+      const newUser = new User({ name, email, password });
+      await newUser.save();
+
+      const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      return { token, user: newUser };
+    },
+    login: async (_, { email, password }) => {
+      const user = await User.findOne({ email });
+      if (!user) throw new Error("User not Found");
+
+      const isMatch = await bycrypt.comapre(password, user.password);
+      if (!isMatch) throw new Error("Invalid credentials");
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      return { token, user };
+    },
   },
 };
 
-// GraphQL Middleware
-app.use(
-  "/graphql",
-  graphqlHTTP({
-    schema: schema,
-    rootValue: root,
-    graphiql: true,
-  })
-);
+const app = express();
+const server = new ApolloServer({ typeDefs, resolvers });
 
 // Start Server
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
-});
+async function startServer() {
+  await server.start();
+  app.use(cors());
+  app.use(bodyParser.json());
+  app.use("/graphql", expressMiddleware(server));
+
+  app.listen(3000, () => {
+    console.log("Server running on port 3000");
+  });
+}
+
+startServer();
