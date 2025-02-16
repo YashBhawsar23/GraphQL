@@ -6,15 +6,34 @@ const app = express();
 
 // Defining GraphQL Schema
 const schema = buildSchema(`
-    type Query {
-    hello: String
+    type User {
+    id: ID!
+    name: String!
+    email: String!
     }
+
+    type Query {
+    getUser(id: ID!): User
+    }
+
+    type Mutation {
+    createUser (name: String!, email: String!): User
+    }
+
     `);
 
 // Define Resolvers
+const users = {};
+
 const root = {
-  hello: () => {
-    return "Hello, GraphQL";
+  getUser: ({ id }) => {
+    return users[id];
+  },
+
+  createUser: ({ name, email }) => {
+    const id = Date.now().toString();
+    users[id] = { id, name, email };
+    return users[id];
   },
 };
 
