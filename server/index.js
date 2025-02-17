@@ -48,12 +48,12 @@ const resolvers = {
 const server = new ApolloServer({
   typeDefs,
   resolvers,
-  Subscriptions: {
+  subscriptions: {
     path: "/subscriptions",
   },
 });
 
 server.listen().then(({ url, subscriptionsUrl }) => {
-  console.log(`Server ready at ${url}`);
-  console.log(`Subscriptions ready at ${subscriptionsUrl}`);
+  console.log(`🚀 Server ready at ${url}`);
+  console.log(`📡 Subscriptions ready at ws://localhost:4000/subscriptions`);
 });
